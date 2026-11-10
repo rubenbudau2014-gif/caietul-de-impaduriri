@@ -598,6 +598,7 @@ let tabBeforeLegal = "labs";
 $("#legalLink").addEventListener("click", () => { if (S.tab !== "legal") tabBeforeLegal = S.tab; showTab("legal"); window.scrollTo({ top: 0 }); });
 $("#legalBack").addEventListener("click", () => { showTab(tabBeforeLegal); window.scrollTo({ top: 0 }); });
 const EMBED = true; // copia independentă (GitHub Pages) setează true la generare
+const TEST_LEN = 18; // fiecare test are exact acest număr de întrebări
 const ANI = [["1", "Anul I"], ["2", "Anul II"], ["3", "Anul III"], ["4", "Anul IV"], ["Master", "Master"], ["Doctorat", "Doctorat"]];
 const anLabel = v => (ANI.find(([x]) => x === String(v)) || [, v || ""])[1];
 const GL_CATS = ["Material forestier de reproducere", "Biologia semințelor", "Recoltare, condiționare și păstrare", "Calitatea semințelor", "Pepiniera silvică", "Producerea puieților", "Sol, fertilizare și protecție", "Calitatea materialului de plantat", "Prelucrarea datelor"];
@@ -1075,19 +1076,9 @@ function renderQuiz() {
   }
   if (!S.quiz && S.admin) area.append(el("p", { class: "note", style: "margin-bottom:12px", text: "Ești în modul profesor: poți parcurge testul, dar rezultatul tău nu se înregistrează." }));
   if (!S.quiz) {
-    const teme = [...new Set(qs.map(q => q.tema).filter(Boolean))].sort();
     if (!qs.length) { area.append(el("div", { class: "empty" }, el("h3", { text: S.loaded ? "Nu există încă întrebări" : "Se încarcă întrebările…" }), el("p", { text: S.admin ? "Adaugă întrebări mai jos, în secțiunea Banca de întrebări." : "Testul de autoevaluare va fi disponibil după ce cadrul didactic adaugă întrebări." }))); return; }
     const err = el("p", { class: "form-err", role: "alert" });
-    // numărul de întrebări se limitează la întrebările disponibile pe tema aleasă
-    const fillCount = () => {
-      const t = $("#qzTema").value, avail = qs.filter(q => !t || q.tema === t).length;
-      const cur = +($("#qzN")?.value || 10), vals = [5, 10, 20].filter(n => n < avail);
-      const sel = el("select", { id: "qzN" }, ...vals.map(n => el("option", { value: n }, String(n))), el("option", { value: avail }, `Toate (${avail})`));
-      const old = $("#qzN"); if (old) old.replaceWith(sel); else $("#qzNField").append(sel);
-      const best = [...vals, avail].filter(n => n <= cur).pop() ?? avail;
-      sel.value = String(best);
-      $("#qzInfo").textContent = `Tema aleasă are ${avail} ${avail === 1 ? "întrebare" : "întrebări"}; vei primi ${best}.`;
-    };
+    if (qs.length < TEST_LEN) { area.append(el("div", { class: "empty" }, el("h3", { text: "Banca nu are încă suficiente întrebări" }), el("p", { text: `Un test are ${TEST_LEN} întrebări; banca are ${qs.length}.` }))); return; }
     const studentFields = EMBED ? [
       el("div", { class: "grid2" },
         el("div", { class: "field" }, el("label", { for: "qzNume", text: "Nume" }), el("input", { type: "text", id: "qzNume", autocomplete: "family-name" })),
@@ -1096,26 +1087,20 @@ function renderQuiz() {
         el("div", { class: "field" }, el("label", { for: "qzSpec", text: "Specializare" }), el("input", { type: "text", id: "qzSpec", placeholder: "ex. Silvicultură" })),
         el("div", { class: "field" }, el("label", { for: "qzAn", text: "An" }), el("select", { id: "qzAn" }, ANI.map(([val, lab]) => el("option", { value: val }, lab)))))] : [];
     area.append(el("div", { class: "sheet", style: "max-width:760px" },
-      el("span", { class: "label", text: "Autoevaluare" }), el("h2", { text: "Verifică-ți cunoștințele" }),
-      el("p", { class: "prose", text: `Banca are ${qs.length} întrebări. Completează datele de identificare, alege tema și câte întrebări vrei; după verificare vezi răspunsurile corecte și explicațiile.` }),
+      el("span", { class: "label", text: "Autoevaluare" }), el("h2", { text: "Test de autoevaluare" }),
+      el("p", { class: "prose", text: `Fiecare test are ${TEST_LEN} întrebări, alese aleatoriu din banca de ${qs.length} întrebări. După verificare vezi răspunsurile corecte și explicațiile.` }),
       ...studentFields,
-      el("div", { class: "grid2" },
-        el("div", { class: "field" }, el("label", { for: "qzTema", text: "Tema" }), el("select", { id: "qzTema", onchange: fillCount }, el("option", { value: "" }, "Toate temele"), teme.map(t => el("option", { value: t }, t)))),
-        el("div", { class: "field", id: "qzNField" }, el("label", { for: "qzN", text: "Număr de întrebări" }), el("select", { id: "qzN" }, el("option", { value: qs.length }, `Toate (${qs.length})`)))),
-      el("p", { class: "note", id: "qzInfo" }),
       err,
       el("div", {}, el("button", { class: "btn primary", onclick: () => {
-        const t = $("#qzTema").value, n = +$("#qzN").value;
         let student = null;
         if (EMBED) {
           const f = { nume: $("#qzNume").value.trim(), prenume: $("#qzPrenume").value.trim(), specializare: $("#qzSpec").value.trim(), an: $("#qzAn").value };
           if (!f.nume || !f.prenume || !f.specializare) { err.textContent = "Completează numele, prenumele și specializarea înainte de test."; return; }
           student = f;
         }
-        const pool = shuffle(qs.filter(q => !t || q.tema === t)).slice(0, n);
-        S.quiz = { tema: t || "Toate temele", items: pool, answers: {}, done: false, student }; renderQuiz();
+        const pool = shuffle(qs).slice(0, TEST_LEN);
+        S.quiz = { tema: "Test de autoevaluare", items: pool, answers: {}, done: false, student }; renderQuiz();
       } }, "Începe testul"))));
-    fillCount();
     return;
   }
   const Z = S.quiz, list = el("div", { class: "qlist" });
