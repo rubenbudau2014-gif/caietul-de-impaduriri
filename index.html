@@ -279,8 +279,25 @@ dialog .foot{display:flex;justify-content:flex-end;gap:8px;padding-top:6px}
   a { color:#000; text-decoration:none; }
   mark.verif { background:none; color:#000; border:1px solid #000; }
 }
+/* Calcule: antet și valori tipărite */
+#printHead{display:none}
+.pv{display:none}
+.calc-id{display:flex;flex-direction:column;gap:12px;max-width:760px;margin-bottom:14px}
+@media print {
+  .pv-src{display:none!important}
+  .pv{display:block!important;white-space:pre-wrap;color:#000;border-bottom:1px solid #999;padding:3px 0;margin:4px 0;font-size:10.5pt}
+  body[data-print="calc"] #view-calc, body[data-print="calc"] #view-calc * { visibility:visible }
+  body[data-print="calc"] #view-calc { position:absolute; left:0; top:0; width:100%; margin:0; }
+  body[data-print="calc"] #printHead { display:block !important; border-bottom:2px solid #000; margin-bottom:10px; }
+  body[data-print="calc"] .calc { display:block !important; }
+  body[data-print="calc"] .calc form, body[data-print="calc"] .out { border:0 !important; padding:0 !important; background:none !important; }
+  body[data-print="calc"] .calc form h2 { margin-top:8px; }
+  body[data-print="calc"] .big .v { color:#000 !important; }
+  body[data-print="calc"] .formula { background:none !important; border:1px solid #999; }
+  body[data-print="calc"] .plot { border:0 !important; }
+  body[data-print="calc"] ol.chain li { break-inside:avoid; }
+}
 </style>
-
 <div class="wrap">
   <header class="top">
     <div class="brand">
@@ -312,7 +329,9 @@ dialog .foot{display:flex;justify-content:flex-end;gap:8px;padding-top:6px}
 
     <!-- CALCULE -->
     <section id="view-calc" role="tabpanel" hidden>
-      <div class="subnav" id="calcNav">
+      <div id="printHead"></div>
+      <div class="calc-id no-print" id="calcId"></div>
+      <div class="subnav no-print" id="calcNav">
         <button data-calc="analiza" aria-pressed="true">Buletin de analiză</button>
         <button data-calc="norma" aria-pressed="false">Norma de semănat</button>
         <button data-calc="pepiniera" aria-pressed="false">Dimensionarea pepinierei</button>
@@ -534,7 +553,7 @@ dialog .foot{display:flex;justify-content:flex-end;gap:8px;padding-top:6px}
 
         <section id="privacy">
           <h3>8. Date cu caracter personal</h3>
-          <p>Aplicația independentă nu colectează, nu stochează și nu prelucrează date cu caracter personal. Datele de identificare ale studentului (nume, prenume, specializare, an) se introduc la fiecare test, apar doar pe ecran și în PDF-ul salvat de student, și nu sunt transmise nimănui.</p>
+          <p>Aplicația independentă nu colectează, nu stochează și nu prelucrează date cu caracter personal. Datele de identificare (nume, prenume, specializare, an) se introduc în fila Test și în fila Calcule, apar doar pe ecran și în PDF-ul salvat de student, și nu sunt transmise nimănui.</p>
           
           <p>Aplicația nu folosește cookie-uri proprii, instrumente de analiză a traficului sau publicitate. La încărcarea paginii, fonturile sunt preluate de la serviciul Google Fonts, care, ca orice server web, primește adresa IP a dispozitivului.</p>
         </section>
@@ -1125,10 +1144,48 @@ function renderQuiz() {
 }
 /* Salvarea ca PDF: se folosește caseta de tipărire a browserului (alege „Salvează ca PDF”). */
 function printSection(k) {
+  const undo = k === "calc" ? preparePrint() : () => {};
   document.body.dataset.print = k;
-  const done = () => { delete document.body.dataset.print; window.removeEventListener("afterprint", done); };
+  const done = () => { delete document.body.dataset.print; undo(); window.removeEventListener("afterprint", done); };
   window.addEventListener("afterprint", done);
   window.print();
+}
+/* Calcule: datele studentului (copia: introduse aici; aplicația: din profil) */
+function calcStudent() {
+  if (EMBED) { const f = S.calcStudent; return f && f.nume && f.prenume && f.specializare ? f : null; }
+  const m = S.me; return m?.nume && m?.specializare ? { nume: m.nume, prenume: m.prenume, specializare: m.specializare, an: m.an } : null;
+}
+function renderCalcId() {
+  const box = $("#calcId"), nav = $("#calcNav");
+  if (nav && !$("#calcPdf")) nav.append(el("button", { type: "button", id: "calcPdf", class: "btn primary no-print", onclick: () => { if (!calcStudent()) { toast("Completează mai întâi datele de identificare."); return; } printSection("calc"); } }, "Salvează calculul ca PDF"));
+  if (!box) return; box.replaceChildren();
+  if (!EMBED) {
+    const st = calcStudent();
+    box.append(el("p", { class: "note", text: st ? `Calculele se salvează pe numele: ${st.prenume} ${st.nume} · ${st.specializare} · ${anLabel(st.an)}` : "Pentru PDF-ul calculelor, completează mai întâi datele de identificare din fila Test." }));
+    return;
+  }
+  if (!S.calcStudent?.an) S.calcStudent = { ...(S.calcStudent || {}), an: "1" }; // valoarea afișată este și cea salvată
+  const v = S.calcStudent || {};
+  const set = (key, val) => { S.calcStudent = { ...(S.calcStudent || {}), [key]: val }; };
+  box.append(el("div", { class: "grid2" },
+    el("div", { class: "field" }, el("label", { for: "cNume", text: "Nume" }), el("input", { type: "text", id: "cNume", value: v.nume || "", oninput: e => set("nume", e.target.value.trim()) })),
+    el("div", { class: "field" }, el("label", { for: "cPrenume", text: "Prenume" }), el("input", { type: "text", id: "cPrenume", value: v.prenume || "", oninput: e => set("prenume", e.target.value.trim()) }))),
+    el("div", { class: "grid2" },
+      el("div", { class: "field" }, el("label", { for: "cSpec", text: "Specializare" }), el("input", { type: "text", id: "cSpec", value: v.specializare || "", placeholder: "ex. Silvicultură", oninput: e => set("specializare", e.target.value.trim()) })),
+      el("div", { class: "field" }, el("label", { for: "cAn", text: "An" }), el("select", { id: "cAn", onchange: e => set("an", e.target.value) }, ANI.map(([val, lab]) => el("option", { value: val, selected: (v.an || "1") === val }, lab))))));
+  box.append(el("p", { class: "note", text: "Introdu datele tale în formular; apoi apasă „Salvează calculul ca PDF” pentru fiecare probă." }));
+}
+/* Pregătește antetul și valorile introduse pentru tipărire; întoarce funcția de refacere */
+function preparePrint() {
+  const sec = document.querySelector("#view-calc .calc:not([hidden])"), st = calcStudent();
+  const title = document.querySelector("#calcNav button[aria-pressed='true']")?.textContent || "";
+  $("#printHead").replaceChildren(el("h2", { text: title }), el("p", { text: st ? `${st.prenume} ${st.nume} · ${st.specializare} · ${anLabel(st.an)} · ${new Date().toLocaleDateString("ro-RO")}` : "" }));
+  const spans = [], srcs = [];
+  sec?.querySelectorAll("input, select, textarea").forEach(f => {
+    const s = el("span", { class: "pv" }, f.tagName === "SELECT" ? (f.options[f.selectedIndex]?.text || "") : f.value);
+    f.classList.add("pv-src"); f.after(s); spans.push(s); srcs.push(f);
+  });
+  return () => { spans.forEach(s => s.remove()); srcs.forEach(f => f.classList.remove("pv-src")); $("#printHead").replaceChildren(); };
 }
 /* Identificarea studentului: datele și rezultatele stau în results/<id>, citite doar de student și de titular */
 const CONSENT_VERSION = "informare-2026-11-08";
@@ -1243,7 +1300,7 @@ function renderAdminQuiz() {
       el("td", { style: "white-space:nowrap" }, el("button", { class: "btn small", onclick: () => openEditor("questions", q) }, "Editează"), " ", deleteBtn("questions", q.id))))))));
 }
 
-function renderAll() { renderLabs(); renderSpecies(); fillSpeciesSelect(); renderGlossary(); renderQuiz(); renderMyResults(); renderAdminQuiz(); }
+function renderAll() { renderLabs(); renderSpecies(); fillSpeciesSelect(); renderGlossary(); renderQuiz(); renderMyResults(); renderAdminQuiz(); renderCalcId(); }
 
 /* ---------- Conectare la baza de date ---------- */
 async function init() {
@@ -1267,6 +1324,7 @@ async function init() {
   if (S.uid && !S.admin) db.doc("results/" + S.uid).onSnapshot(s => {
     S.me = s.exists ? s.data() : null; S.meLoaded = true;
     if (!S.quiz || S.quiz.done) renderQuiz();
+    renderCalcId();
     renderMyResults();
   }, () => { S.meLoaded = true; renderQuiz(); });
   if (S.admin) db.collection("results").onSnapshot(snap => { S.results = snap.docs.map(d => ({ id: d.id, ...d.data() })); renderAdminQuiz(); }, () => {});
